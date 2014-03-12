@@ -75,7 +75,8 @@ class BaseIsomap(six.with_metaclass(ABCMeta, BaseEstimator)):
         evals = self.kernel_pca_.lambdas_
         return np.sqrt(np.sum(G_center ** 2) - np.sum(evals ** 2)) / G.shape[0]
 
-    def _shortest_distance_to_training_data(self, n_samples, distances, indices):
+    def _shortest_distance_to_training_data(self, n_samples, distances,
+                                            indices):
         """Compute the graph of shortest distances to training data."""
         #Create the graph of shortest distances from X to self.training_data_
         # via the nearest neighbors of X.
@@ -92,7 +93,7 @@ class BaseIsomap(six.with_metaclass(ABCMeta, BaseEstimator)):
 
 
 class Isomap(BaseIsomap, TransformerMixin):
-    """Isomap Embedding based on k nearest neighbors
+    """Isomap Embedding based on k nearest neighbors aka k-Isomap
 
     Non-linear dimensionality reduction through Isometric Mapping
 
@@ -230,7 +231,7 @@ class Isomap(BaseIsomap, TransformerMixin):
 
 
 class EpsilonIsomap(BaseIsomap, TransformerMixin):
-    """Isomap Embedding based on epsilon nearest neighbors
+    """Isomap Embedding based on epsilon nearest neighbors aka epsilon-Isomap
 
     Non-linear dimensionality reduction through Isometric Mapping
 
