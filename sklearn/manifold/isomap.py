@@ -230,7 +230,7 @@ class Isomap(BaseIsomap, TransformerMixin):
 
 
 class EpsilonIsomap(BaseIsomap, TransformerMixin):
-    """Isomap Embedding based on k nearest neighbors
+    """Isomap Embedding based on epsilon nearest neighbors
 
     Non-linear dimensionality reduction through Isometric Mapping
 
@@ -306,8 +306,8 @@ class EpsilonIsomap(BaseIsomap, TransformerMixin):
         self.nbrs_ = NearestNeighbors(radius=self.radius,
                                       algorithm=self.neighbors_algorithm)
         self._fit_nbrs(self.nbrs_, X)
-        kng = kneighbors_graph(self.nbrs_, self.radius,
-                               mode='distance')
+        kng = radius_neighbors_graph(self.nbrs_, self.radius,
+                                     mode='distance')
         self._fit_kpca(kng)
 
     def fit(self, X, y=None):
