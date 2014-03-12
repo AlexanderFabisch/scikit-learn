@@ -368,3 +368,22 @@ class EpsilonIsomap(BaseIsomap, TransformerMixin):
         G_X = self._shortest_distance_to_training_data(X.shape[0], distances,
                                                        indices)
         return self.kernel_pca_.transform(G_X)
+
+    def determine_connected_components(self):
+        """Determine number of connected components.
+
+        Returns
+        -------
+        prototypes : array, shape (n_samples,)
+            Index of first sample from the corresponding component in the
+            training set.
+
+        n_connected_components : int
+            Number of connected components, i.e. subgraphs in the training set
+            that are not connected to each other.
+        """
+        self.dist_matrix_[self.dist_matrix_ == 0] = -1
+        np.fill_diagonal(self.dist_matrix_, 0.0)
+        prototypes = np.argmin(self.dist_matrix_ == -1, axis=0)
+        n_connected_components = np.unique(prototypes).shape[0]
+        return prototypes, n_connected_components
