@@ -6,6 +6,7 @@
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
+from scipy.spatial.distance import pdist, squareform
 from ..base import BaseEstimator, TransformerMixin
 from ..neighbors import (NearestNeighbors, kneighbors_graph,
                          radius_neighbors_graph)
@@ -13,7 +14,60 @@ from ..utils import check_arrays
 from ..utils.graph import graph_shortest_path
 from ..decomposition import KernelPCA
 from ..preprocessing import KernelCenterer
+from ..linear_model import LinearRegression
 from ..externals import six
+
+
+def elbow_method(n_components, scores, elbow=True, verbose=0):
+    """Elbow detection similar to DiffBIC knee detection.
+
+    See http://www.cs.joensuu.fi/~zhao/PAPER/ICTAI08.pdf for details.
+
+    Parameters
+    ----------
+    n_components : array-like, shape (n_component_samples,)
+        Number of components where we have measured the score.
+
+    scores : array-like, shape(n_component_samples,)
+        Measured scores.
+
+    elbow : bool, optional (default: True)
+        Detect elbow. Otherwise we will detect a knee point.
+
+    verbose : int, optional (default: 0)
+        Verbosity level.
+    """
+    if elbow:
+        # We want to recognize elbows, no knee points
+        scores = 1 - np.asarray(scores)
+
+    # Determine trend
+    lin_model = LinearRegression().fit(
+        np.asarray(n_components)[:, np.newaxis], scores)
+    increasing_trend = lin_model.coef_[0] > 0
+    if verbose:
+        trend = "Increasing" if increasing_trend else "Decreasing"
+        print("%s trend, coefficient of linear model is %.3f"
+              % (trend, lin_model.coef_[0]))
+
+    components_range = np.max(n_components) - np.min(n_components)
+    scores_min = np.min(scores)
+    scores_range = np.max(scores) - scores_min
+    C1 = components_range * (scores - scores_min) / scores_range
+    Cm = C1 / np.asarray(n_components)
+    Cm_min = np.min(Cm)
+    Cm_range = np.max(Cm) - Cm_min
+    C2 = components_range * (Cm - Cm_min) / Cm_range
+    if increasing_trend:
+        diff_BIC = (C1 + C2) / 2
+    else:
+        diff_BIC = np.abs(C1 - C2) / 2
+
+    n_opt_components = n_components[np.argmax(diff_BIC)]
+
+    if elbow:
+        diff_BIC = components_range - diff_BIC
+    return diff_BIC, n_opt_components
 
 
 class BaseIsomap(six.with_metaclass(ABCMeta, BaseEstimator)):
@@ -90,6 +144,39 @@ class BaseIsomap(six.with_metaclass(ABCMeta, BaseEstimator)):
         G_X **= 2
         G_X *= -0.5
         return G_X
+
+    def residual_variance(self, n_components):
+        """Compute residual variance of the embedding.
+
+        The residual variance is defined as
+
+        .. math::
+
+            1 - R^2(D, D_Y)
+
+        where :math:`D_Y` is the matrix of Euclidean distances in the
+        low-dimensional embedding recovered by Isomap, :math:`D` is the
+        distance matrix in the original space and R is the correlation
+        coefficient.
+
+        Parameters
+        ----------
+        n_components : int <= self.n_components
+            Number of embedded components that we be considered.
+
+        Returns
+        -------
+        residual_variance : float
+        """
+        if not n_components <= self.n_components:
+            raise ValueError("n_components must be less than or equal %d but "
+                             "is %d" % (self.n_components, n_components))
+
+        embedded = (self.kernel_pca_.alphas_[:, :n_components] *
+                    np.sqrt(self.kernel_pca_.lambdas_[:n_components]))
+        D = pdist(self.training_data_, "euclidean")
+        D_Y = pdist(embedded, "euclidean")
+        return 1 - np.corrcoef(D, D_Y)[0, 1] ** 2
 
 
 class Isomap(BaseIsomap, TransformerMixin):
