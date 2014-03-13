@@ -6,7 +6,7 @@
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import pdist
 from ..base import BaseEstimator, TransformerMixin
 from ..neighbors import (NearestNeighbors, kneighbors_graph,
                          radius_neighbors_graph)
