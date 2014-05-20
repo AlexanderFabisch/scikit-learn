@@ -10,7 +10,6 @@
 
 import numpy as np
 from scipy import linalg
-from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 from ..base import BaseEstimator
 from ..utils import check_arrays
@@ -87,7 +86,9 @@ def _kl_divergence(params, P, alpha, n_samples, n_components):
     X_embedded = params.reshape(n_samples, n_components)
 
     # Q is a heavy-tailed distribution: Student's t-distribution
-    n = pdist(X_embedded, "sqeuclidean")
+    n = euclidean_distances(X_embedded, squared=True)
+    n = (n + n.T) / 2.0
+    n = squareform(n)
     n += 1.
     n /= alpha
     n **= (alpha + 1.0) / -2.0
@@ -424,7 +425,7 @@ class TSNE(BaseEstimator):
         else:
             if self.verbose:
                 print("[t-SNE] Computing pairwise affinities...")
-            affinities = squareform(pdist(X, self.affinity))
+            affinities = euclidean_distances(X, squared=True)
 
         # Degrees of freedom of the Student's t-distribution. The suggestion
         # alpha = n_components - 1 comes from "Learning a Parametric Embedding
