@@ -10,8 +10,6 @@
 
 import numpy as np
 from scipy import linalg
-from scipy.spatial.distance import pdist
-from scipy.spatial.distance import squareform
 from ..base import BaseEstimator
 from ..utils import check_arrays
 from ..utils import check_random_state
@@ -51,7 +49,7 @@ def _joint_probabilities(affinities, desired_perplexity, verbose):
         affinities, desired_perplexity, verbose)
     P = conditional_P + conditional_P.T
     sum_P = np.maximum(np.sum(P), MACHINE_EPSILON)
-    P = np.maximum(squareform(P) / sum_P, MACHINE_EPSILON)
+    P = np.maximum(P / sum_P, MACHINE_EPSILON)
     return P
 
 
@@ -87,21 +85,19 @@ def _kl_divergence(params, P, alpha, n_samples, n_components):
     X_embedded = params.reshape(n_samples, n_components)
 
     # Q is a heavy-tailed distribution: Student's t-distribution
-    n = pdist(X_embedded, "sqeuclidean")
+    n = euclidean_distances(X_embedded, squared=True)
     n += 1.
     n /= alpha
     n **= (alpha + 1.0) / -2.0
-    Q = np.maximum(n / (2.0 * np.sum(n)), MACHINE_EPSILON)
-
-    # Optimization trick below: np.dot(x, y) is faster than
-    # np.sum(x * y) because it calls BLAS
+    np.fill_diagonal(n, 0.0)
+    Q = np.maximum(n / np.sum(n), MACHINE_EPSILON)
 
     # Objective: C (Kullback-Leibler divergence of P and Q)
-    kl_divergence = 2.0 * np.dot(P, np.log(P / Q))
+    kl_divergence = np.dot(_ravel(P), _ravel(np.log(P / Q)))
 
     # Gradient: dC/dY
     grad = np.ndarray((n_samples, n_components))
-    PQd = squareform((P - Q) * n)
+    PQd = (P - Q) * n
     for i in range(n_samples):
         np.dot(_ravel(PQd[i]), X_embedded[i] - X_embedded, out=grad[i])
     grad = grad.ravel()
@@ -332,9 +328,8 @@ class TSNE(BaseEstimator):
         Maximum number of iterations for the optimization. Should be at
         least 200.
 
-    affinity : string, optional (default: sqeuclidean)
-        An affinity metric that is defined in scipy.spatial.distance or
-        'precomputed'.
+    affinity : string, optional (default: 'euclidean')
+        'euclidean' or 'precomputed'.
 
     init : string, optional (default: random)
         Initialization of embedding. Possible options are 'random' and 'pca'.
@@ -381,10 +376,13 @@ class TSNE(BaseEstimator):
     """
     def __init__(self, n_components=2, perplexity=30.0,
                  early_exaggeration=4.0, learning_rate=1000.0, n_iter=1000,
-                 affinity="sqeuclidean", init="random", verbose=0,
+                 affinity="euclidean", init="random", verbose=0,
                  random_state=None):
         if init not in ["pca", "random"]:
             raise ValueError("'init' must be either 'pca' or 'random'")
+        if affinity not in ["euclidean", "precomputed"]:
+            raise ValueError("Affinity must be either 'euclidean' or "
+                             "'precomputed'.")
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
@@ -421,10 +419,10 @@ class TSNE(BaseEstimator):
             if X.shape[0] != X.shape[1]:
                 raise ValueError("X should be a square affinity matrix")
             affinities = X
-        else:
+        elif self.affinity == "euclidean":
             if self.verbose:
                 print("[t-SNE] Computing pairwise affinities...")
-            affinities = squareform(pdist(X, self.affinity))
+            affinities = euclidean_distances(X, squared=True)
 
         # Degrees of freedom of the Student's t-distribution. The suggestion
         # alpha = n_components - 1 comes from "Learning a Parametric Embedding
