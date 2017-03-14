@@ -653,8 +653,8 @@ class TSNE(BaseEstimator):
     """
 
     def __init__(self, n_components=2, perplexity=30.0,
-                 early_exaggeration=4.0, learning_rate=200.0, n_iter=1000,
-                 n_iter_without_progress=30, min_grad_norm=1e-7,
+                 early_exaggeration=4.0, learning_rate="200-new-default",
+                 n_iter=1000, n_iter_without_progress=30, min_grad_norm=1e-7,
                  metric="euclidean", init="random", verbose=0,
                  random_state=None, method='barnes_hut', angle=0.5):
         if not ((isinstance(init, string_types) and
@@ -665,6 +665,13 @@ class TSNE(BaseEstimator):
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
+        # TODO sklearn 0.20: remove this warning
+        if learning_rate == "200-new-default":
+            import warnings
+            warnings.warn("The default learning rate of TSNE has changed "
+                          "from 1000 to 200 in sklearn 0.19. Set it manually "
+                          "to 200 to disable this warning.")
+            learning_rate = 200.0
         self.learning_rate = learning_rate
         self.n_iter = n_iter
         self.n_iter_without_progress = n_iter_without_progress
@@ -675,12 +682,6 @@ class TSNE(BaseEstimator):
         self.random_state = random_state
         self.method = method
         self.angle = angle
-
-        # TODO sklearn 0.20: remove this warning
-        if learning_rate == 200.0:
-            import warnings
-            warnings.warn("The default learning rate of TSNE has changes " +
-                          "from 1000 to 200 in sklearn 0.19")
 
     def _fit(self, X, skip_num_points=0):
         """Fit the model using X as training data.
