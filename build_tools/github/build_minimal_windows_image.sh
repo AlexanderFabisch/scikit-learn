@@ -24,6 +24,12 @@ if [[ $FREE_THREADED_BUILD == "False" ]]; then
         PYTHON_DOCKER_IMAGE_PART="${PYTHON_DOCKER_IMAGE_PART}-rc"
     fi
 
+    # Temporary work-around to avoid a loky issue on Windows >= 3.13.7, see
+    # https://github.com/joblib/loky/issues/459
+    if [[ "$PYTHON_DOCKER_IMAGE_PART" == "3.13" ]]; then
+        PYTHON_DOCKER_IMAGE_PART="3.13.6"
+    fi
+
     # We could have all of the following logic in a Dockerfile but it's a lot
     # easier to do it in bash rather than figure out how to do it in Powershell
     # inside the Dockerfile ...
@@ -44,10 +50,8 @@ if [[ $FREE_THREADED_BUILD == "False" ]]; then
     docker commit $CONTAINER_ID scikit-learn/minimal-windows
 else
     # This is too cumbersome to use a Docker image in the free-threaded case
-    # TODO Remove the next three lines when scipy and pandas each have a release
-    # with a Windows free-threaded wheel.
-    python -m pip install numpy
-    dev_anaconda_url=https://pypi.anaconda.org/scientific-python-nightly-wheels/simple
-    python -m pip install --pre --upgrade --timeout=60 --extra-index $dev_anaconda_url scipy pandas --only-binary :all:
-    python -m pip install $CIBW_TEST_REQUIRES
+    # TODO When pandas has a release with a Windows free-threaded wheel we can
+    # replace the next line with
+    # python -m pip install CIBW_TEST_REQUIRES
+    python -m pip install pytest
 fi

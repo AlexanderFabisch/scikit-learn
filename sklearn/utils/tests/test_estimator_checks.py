@@ -105,6 +105,14 @@ from sklearn.utils.validation import (
 )
 
 
+def _mark_thread_unsafe_if_pytest_imported(f):
+    pytest = sys.modules.get("pytest")
+    if pytest is not None:
+        return pytest.mark.thread_unsafe(f)
+    else:
+        return f
+
+
 class CorrectNotFittedError(ValueError):
     """Exception class to raise if estimator is used before fitting.
 
@@ -575,10 +583,6 @@ class BrokenArrayAPI(BaseEstimator):
 
 def test_check_array_api_input():
     try:
-        importlib.import_module("array_api_compat")
-    except ModuleNotFoundError:
-        raise SkipTest("array_api_compat is required to run this test")
-    try:
         importlib.import_module("array_api_strict")
     except ModuleNotFoundError:  # pragma: nocover
         raise SkipTest("array-api-strict is required to run this test")
@@ -667,7 +671,7 @@ def test_check_dict_unchanged():
 def test_check_sample_weights_pandas_series():
     # check that sample_weights in fit accepts pandas.Series type
     try:
-        from pandas import Series  # noqa
+        from pandas import Series  # noqa: F401
 
         msg = (
             "Estimator NoSampleWeightPandasSeriesType raises error if "
@@ -803,6 +807,10 @@ def test_check_estimator_not_fail_fast():
     assert any(item["status"] == "passed" for item in check_results)
 
 
+# Some estimator checks rely on warnings in deep functions calls. This is not
+# automatically detected by pytest-run-parallel shallow AST inspection, so we
+# need to mark the test function as thread-unsafe.
+@_mark_thread_unsafe_if_pytest_imported
 def test_check_estimator():
     # tests that the estimator actually fails on "bad" estimators.
     # not a complete test of all checks, which are very extensive.
@@ -995,6 +1003,10 @@ def test_check_no_attributes_set_in_init():
         )
 
 
+# Some estimator checks rely on warnings in deep functions calls. This is not
+# automatically detected by pytest-run-parallel shallow AST inspection, so we
+# need to mark the test function as thread-unsafe.
+@_mark_thread_unsafe_if_pytest_imported
 def test_check_estimator_pairwise():
     # check that check_estimator() works on estimator with _pairwise
     # kernel or metric
@@ -1312,6 +1324,7 @@ if __name__ == "__main__":
     run_tests_without_pytest()
 
 
+@_mark_thread_unsafe_if_pytest_imported  # Some checks use warnings.
 def test_estimator_checks_generator_skipping_tests():
     # Make sure the checks generator skips tests that are expected to fail
     est = next(_construct_instances(NuSVC))
@@ -1377,8 +1390,8 @@ def test_check_estimator_callback():
     expected_failed_checks = _get_expected_failed_checks(est)
     # This is to make sure we test a class that has some expected failures
     assert len(expected_failed_checks) > 0
-    with warnings.catch_warnings(record=True) as records:
-        logs = check_estimator(
+    with warnings.catch_warnings(record=True):
+        check_estimator(
             est,
             expected_failed_checks=expected_failed_checks,
             on_fail=None,
@@ -1440,6 +1453,27 @@ def test_check_requires_y_none():
 
     # no warnings are raised
     assert not [r.message for r in record]
+
+    # Make an estimator that throws the wrong error to make sure we catch it
+    class EstimatorWithWrongError(BaseEstimator):
+        def fit(self, X, y):
+            try:
+                X, y = check_X_y(X, y)
+            except ValueError as ve:
+                # This assertion is just to make sure we are catching the value error
+                # that comes from wrong y (=None) and not some other value error
+                assert str(ve) == (
+                    "estimator requires y to be passed, but the target y is None"
+                )
+                # Override the error message force fail
+                raise ValueError("This is the wrong message that raises error")
+
+    err_msg = (
+        "Your estimator raised a ValueError, but with the incorrect or "
+        "incomplete error message to be considered a graceful fail."
+    )
+    with raises(ValueError, match=err_msg):
+        check_requires_y_none("estimator", EstimatorWithWrongError())
 
 
 def test_non_deterministic_estimator_skip_tests():
@@ -1616,6 +1650,7 @@ def test_check_classifier_not_supporting_multiclass():
 
 
 # Test that set_output doesn't make the tests to fail.
+@_mark_thread_unsafe_if_pytest_imported
 def test_estimator_with_set_output():
     # Doing this since pytest is not available for this file.
     for lib in ["pandas", "polars"]:
@@ -1625,7 +1660,15 @@ def test_estimator_with_set_output():
             raise SkipTest(f"Library {lib} is not installed")
 
         estimator = StandardScaler().set_output(transform=lib)
-        check_estimator(estimator)
+        check_estimator(
+            estimator=estimator,
+            expected_failed_checks={
+                "check_array_api_input": (
+                    "this check is expected to fail because pandas and polars"
+                    " are not compatible with the array api."
+                )
+            },
+        )
 
 
 def test_estimator_checks_generator():
